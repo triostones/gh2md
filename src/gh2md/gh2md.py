@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from dateutil.parser import parse as dateutil_parse
 
-from . import templates_markdown, __version__
+from . import __version__, templates_markdown
 
 ENV_GITHUB_TOKEN = "GITHUB_ACCESS_TOKEN"
 GITHUB_ACCESS_TOKEN_PATHS = [
@@ -167,10 +167,10 @@ class GithubAPI:
     Handles GraphQL API queries.
     """
 
+    endpoint: str = "https://api.github.com/graphql"
     token: str = None
     per_page: int = 100
 
-    _ENDPOINT = "https://api.github.com/graphql"
     _REPO_QUERY = """
         query(
           $owner: String!
@@ -376,7 +376,7 @@ class GithubAPI:
         for attempt in range(1, 3):
             try:
                 resp = self._request_session().post(
-                    self._ENDPOINT, json=json, headers=headers
+                    self.endpoint, json=json, headers=headers
                 )
                 resp.raise_for_status()
                 err = False
@@ -695,10 +695,13 @@ def export_issues_to_markdown_file(
         )
         for issue_slug, formatted_issue in formatted_issues.items():
             issue_file_markdown = "\n".join([formatted_issue, metadata_footnote])
-            issue_path = os.path.join(output_path, f"{issue_slug}{file_extension}")
+            month_dir = os.path.join(output_path, issue_slug[:7])
+            if not os.path.exists(month_dir):
+                os.makedirs(month_dir)
+            issue_path = os.path.join(month_dir, f"{issue_slug}{file_extension}")
             logger.info("Writing to file: {}".format(issue_path))
-            with open(issue_path, "wb") as out:
-                out.write(issue_file_markdown.encode("utf-8"))
+            with open(issue_path, "w") as out:
+                out.write(issue_file_markdown)
     else:
         # Write everything in one file
         full_markdown_export = templates_markdown.BASE.format(
@@ -767,7 +770,6 @@ def format_issue_to_markdown(issue: GithubIssue) -> Tuple[str, str]:
             issue.created_at.strftime("%Y-%m-%d"),
             str(issue.number),
             slugtype,
-            issue.state,
         ]
     )
     return slug, formatted_issue.replace("\r", "")
@@ -794,16 +796,11 @@ def main():
     args = parse_args(sys.argv[1:])
 
     if args.use_multiple_files:
-        if os.path.exists(args.output_path):
-            if len(os.listdir(args.output_path)):
-                raise RuntimeError(
-                    f"Output directory already exists and has files in it: {args.output_path}"
-                )
-        else:
+        if not os.path.exists(args.output_path):
             logger.info(f"Creating output directory: {args.output_path}")
             os.makedirs(args.output_path, exist_ok=True)
 
-    gh = GithubAPI(token=get_environment_token())
+    gh = GithubAPI(token=get_environment_token(), endpoint=os.getenv("ENDPOINT"),)
     repo = gh.fetch_and_decode_repository(
         args.repo,
         include_closed_prs=args.include_closed_prs,

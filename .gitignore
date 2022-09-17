@@ -2,6 +2,7 @@
 htmlcov
 .Python
 env/
+venv/
 build/
 develop-eggs/
 dist/
@@ -16,4 +17,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
 scratch/
+tmp/
+.env
